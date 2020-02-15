@@ -1,0 +1,80 @@
+# This file makes use of CircleCI Version 2 samples.
+# TODO: Commented out code is planned on being implemented for automated Laravel testing during builds
+version: 2
+
+jobs:
+  build:
+    docker:
+      - image: circleci/php:7.1-node-browsers
+    working_directory: ~/azulecast-api
+    steps:
+      - checkout
+      - persist_to_workspace:
+          root: .
+          paths:
+            - .
+    #    - run: sudo apt install -y libsqlite3-dev zlib1g-dev
+    #    - run: sudo docker-php-ext-install zip
+    #    - run: sudo composer self-update
+    #    - restore_cache: # special step to restore the dependency cache if `composer.lock` does not change
+    #        keys:
+    #          - composer-v1-{{ checksum "composer.lock" }}
+    #          # fallback to using the latest cache if no exact match is found (See https://circleci.com/docs/2.0/caching/)
+    #          - composer-v1-
+    #    - run: composer install -n --prefer-dist
+    #    - save_cache: # special step to save the dependency cache with the `composer.lock` cache key template
+    #        key: composer-v1-{{ checksum "composer.lock" }}
+    #        paths:
+    #          - vendor
+    #    - restore_cache: # special step to restore the dependency cache if `package-lock.json` does not change
+    #        keys:
+    #          - node-v1-{{ checksum "package-lock.json" }}
+    #          # fallback to using the latest cache if no exact match is found (See https://circleci.com/docs/2.0/caching/)
+    #          - node-v1-
+    #    - run: yarn install
+    #    - save_cache: # special step to save the dependency cache with the `package-lock.json` cache key template
+    #        key: node-v1-{{ checksum "package-lock.json" }}
+    #        paths:
+    #          - node_modules
+    #    - run: touch storage/testing.sqlite
+    #    - run: php artisan migrate --env=testing --database=sqlite_testing --force
+    #    - run: ./vendor/bin/codecept build
+    #    - run: ./vendor/bin/codecept run
+    # See https://circleci.com/docs/2.0/deployment-integrations/ for deploy examples
+  deploy:
+    machine:
+      enabled: true
+    working_directory: ~/azulecast-api
+    steps:
+      - attach_workspace:
+          at: .
+      - add_ssh_keys:
+          fingerprints:
+            - "01:b2:16:10:b3:f2:a1:d9:c9:42:1d:f6:4d:ee:67:83"
+      - run:
+          name: Compress archive
+          command: tar -czvf $ARCHIVE ./*
+      - run:
+          name: Deploy Over SSH
+          command: |
+            scp -Br $ARCHIVE $SSH_USER@$SSH_HOST:$STAGE_PATH$ARCHIVE
+      - run:
+          name: Extract Archive
+          command: ssh $SSH_USER@$SSH_HOST "cd $STAGE_PATH && mkdir $DESTINATION-temp && tar -xzvf $ARCHIVE -C $DESTINATION-temp && rm $ARCHIVE"
+      - run:
+          name: Overwrite
+          command: ssh $SSH_USER@$SSH_HOST "cd $STAGE_PATH && rm -rf $DESTINATION && mv $DESTINATION-temp $DESTINATION"
+workflows:
+  version: 2
+  build-and-deploy:
+    jobs:
+      - build:
+          filters:
+            branches:
+              only: master
+      - deploy:
+          requires:
+            - build
+          filters:
+            branches:
+              only: master
